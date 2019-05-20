@@ -1,7 +1,10 @@
 exports.callScript = function(applicationId, scriptFile, scriptArgs) {
 
   if (scriptArgs instanceof Array) {
-    scriptArgs = scriptArgs.join('","')
+    scriptArgs = scriptArgs.join({
+        darwin: '","',
+        win32: "','"
+    }[process.platform])
   }
 
   const hostCommand = {
@@ -17,7 +20,7 @@ exports.callScript = function(applicationId, scriptFile, scriptArgs) {
           command: 'powershell',
           args: [
               '-command',
-              `"$app = new-object -comobject ${applicationId}; $app.DoScript('${scriptFile}', 1246973031)"`
+              `$OutputEncoding = [Console]::OutputEncoding = [Text.UTF8Encoding]::UTF8; "$app = new-object -comobject ${applicationId}; $app.DoScript('${scriptFile}', 1246973031, @('${scriptArgs}'))"`
           ],
           options: { shell: true }
       }

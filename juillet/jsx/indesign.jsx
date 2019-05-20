@@ -13,6 +13,10 @@ global_actions = {};
 global_arguments = arguments;
 global_inspection = {}
 
+/*****************************************************************************
+ * Common functions
+ *****************************************************************************/
+
 /**
  * Round a number with decimal precision
  * 
@@ -34,7 +38,7 @@ function round(number, precision) {
  * @returns {Object} Containing X, Y position and width, height
  */
 function get_geometry(bounds) {
-    var precision = 3
+    var precision = 3;
     return {
         x: round(bounds[1], precision),
         y: round(bounds[0], precision),
@@ -71,6 +75,38 @@ function get_color(color) {
     }
 }
 
+function saveAs(idml, targetFile, page, percent) {
+    var extension = targetFile.toLowerCase().split('.').pop();
+    const format = {
+        'png': ExportFormat.PNG_FORMAT,
+        'jpg': ExportFormat.JPG,
+        'jpeg': ExportFormat.JPG,
+        'pdf': ExportFormat.PDF_TYPE,
+    }[extension];
+
+    if (format == ExportFormat.JPG) {
+        app.jpegExportPreferences.jpegColorSpace = JpegColorSpaceEnum.RGB;
+        app.jpegExportPreferences.useDocumentBleeds = false;
+        app.jpegExportPreferences.jpegQuality = JPEGOptionsQuality.HIGH;
+        app.jpegExportPreferences.exportingSpread = false;
+        app.jpegExportPreferences.jpegExportRange = ExportRangeOrAllPages.EXPORT_RANGE;
+        app.jpegExportPreferences.pageString = idml.pages.item(page).name;
+    } else if (format == ExportFormat.JPG) {
+        app.pngExportPreferences.pngColorSpace = PNGColorSpaceEnum.RGB;
+        app.pngExportPreferences.useDocumentBleeds = false;
+        app.pngExportPreferences.pngQuality = PNGQualityEnum.HIGH;
+        app.pngExportPreferences.exportingSpread = false;
+        app.pngExportPreferences.jpegExportRange = ExportRangeOrAllPages.EXPORT_RANGE;
+        app.pngExportPreferences.pageString = idml.pages.item(page).name;
+    }
+
+    idml.exportFile(format, File(targetFile), false);
+}
+
+/*****************************************************************************
+ * Inspection functions
+ *****************************************************************************/
+
 /**
  * TextFrame inspection function.
  */
@@ -82,7 +118,7 @@ global_inspection['TextFrame'] = function(element) {
     for (var i = 0; i < story.texts.length; i++) {
         var text = story.texts.item(i);
 
-        var style = [];
+        var style = [text.fontStyle.toLowerCase()];
 
         if (text.underline) {
             style.push('underline');
@@ -91,18 +127,10 @@ global_inspection['TextFrame'] = function(element) {
         if (text.strikeThru) {
             style.push('strikeout');
         }
-        
-        // if (text.appliedFont.fontStyleName.toLowerCase() == 'bold') {
-        //     style.push('bold');
-        // }
-
-        // if (text.appliedFont.fontStyleName.toLowerCase() == 'Italic') {
-        //     style.push('italic');
-        // }
 
         texts.push({
-            text: text.contents.replace('\r', '\n'),
-            fontName: text.appliedFont.name,    // TODO pegar o fullname
+            text: text.contents.replace("\r", "\n"),
+            fontName: text.appliedFont.name.replace("\t", " "),
             fontSize: text.pointSize,
             color: get_color(text.fillColor),
             style: style,
@@ -118,6 +146,10 @@ global_inspection['TextFrame'] = function(element) {
         geometry: get_geometry(bounds)
     }
 }
+
+/*****************************************************************************
+ * Exportable functions
+ *****************************************************************************/
 
 /**
  * Inspect a IDML file and returns its elements.
@@ -168,11 +200,17 @@ global_actions['inspect'] = function(args) {
                     content.push(global_inspection[itemName](item));
                 }
             }
+
+            // Generate the page preview
+            preview_file = fileName.replace('.idml', '.page_' + (i + 1) + '.jpg');
+            saveAs(idml, preview_file, i, 0);
+
+            // Push page content to return
             pages.push({
                 page: i+1, 
                 units: args[1],
                 geometry: get_geometry(page.bounds),
-                preview: '',
+                preview: preview_file,
                 content: content
             });
         }

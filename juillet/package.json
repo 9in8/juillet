@@ -1,5 +1,5 @@
 {
-    "name": "sparrow",
+    "name": "juillet",
     "version": "0.0.1",
     "description": "Invoke Adobe InDesign engine",
     "main": "main.js",
@@ -10,7 +10,6 @@
     "author": "Rodrigo Salvador <rodrigo@9in8.com.br>",
     "license": "ISC",
     "dependencies": {
-        "debug": "4.1.1",
         "npm": "6.9.0"
     }
 }
