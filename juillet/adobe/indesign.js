@@ -4,7 +4,7 @@
  * Ivoke Adobe InDesign routines using a custom JSX script.
  */
 
-const util = require('./util.js')
+const util = require('../util.js')
 const path = require('path');
 
 // ID mapper to the application by platform
@@ -14,7 +14,7 @@ const applicationId = {
 }
 
 // JSX file to be called
-const outputFilePath = path.resolve(__dirname, 'jsx', 'indesign.jsx');
+const outputFilePath = path.resolve(__dirname + '/../', 'jsx', 'indesign.jsx');
 
 /**
  * Calls a indesign JSX passing arguments and handling the callback.
@@ -32,34 +32,32 @@ function call(actionName, scriptArgs, callback) {
     applicationId[process.platform], outputFilePath, scriptArgs
   );
 
-  var child = spawn(command, args, options);
-  var output = null;
+  const child = spawn(command, args, options);
+  let stdout = '';
+  let stderr = [];
 
   // The result is cought in the stdout
   child.stdout.on('data', (data) => {
-    output = JSON.parse(data);
+    stdout += data;
   });
 
   // Capture the strerr to handle errors in the script
   child.stderr.on('data', (data) => {
-    if (!output) {
-      output = [];
-    }
-    output.push(data.toString());
+    stderr.push(data.toString());
   });
 
   // Exit happens when the script finish
   child.on('exit', (code) => {
-    result = {
+    let output = {
       success: (code == 0),
       action: actionName,
-      result: output,
+      result: (code == 0) ? JSON.parse(stdout) : stderr,
     }
 
     if (callback) {
-      callback(result);
+      callback(output);
     } else {
-      console.log(result);
+      console.log(output);
     }
   });
 }
@@ -67,8 +65,10 @@ function call(actionName, scriptArgs, callback) {
 /**
  * Inspect the Indesign file content
  */
-exports.inspect = function(fileName, callback) {
-  call('inspect', [fileName, 'pt'], callback);
+exports.inspect = function(fileName, args, callback) {
+  let units = args['units'];
+  let assets = args['assets'];
+  call('inspect', [fileName, units, assets], callback);
 }
 
 /**

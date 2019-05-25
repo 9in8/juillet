@@ -103,6 +103,24 @@ function saveAs(idml, targetFile, page, percent) {
     idml.exportFile(format, File(targetFile), false);
 }
 
+function createFolder(folder) {  
+    if (folder.parent !== null && !folder.parent.exists) {  
+        createFolder(folder.parent);  
+    }
+    if (!folder.exists) {
+        folder.create();
+    }  
+}  
+
+function copyFileAndAssetIt(targetFolder, sourceFile, maskFolder, dropSource) {
+    var source = new File(sourceFile);
+    var targetFileName = targetFolder.fsName + '/' + source.displayName.toLowerCase().replace(/[^0-9a-z-.]/gi, '_');
+    var target = new File(targetFileName);
+    if (!target.exists) source.copy(target);
+    if (dropSource) source.remove(); 
+    return targetFileName.replace(maskFolder.parent.parent.fsName, '{hostname}').replace(/\\+/gi, '/');
+}
+
 /*****************************************************************************
  * Inspection functions
  *****************************************************************************/
@@ -176,6 +194,13 @@ global_actions['inspect'] = function(args) {
     idml.viewPreferences.horizontalMeasurementUnits = units;
     idml.viewPreferences.verticalMeasurementUnits = units;
 
+    var assetsFolder = new Folder(args[2]);
+    var fontFolder = new Folder(assetsFolder.fsName + '/fonts/');
+    var imgsFolder = new Folder(assetsFolder.fsName + '/images/');
+
+    createFolder(fontFolder);
+    createFolder(imgsFolder);
+
     var pages = [];
     var fonts = [];
 
@@ -185,7 +210,7 @@ global_actions['inspect'] = function(args) {
             var font = idml.fonts.item(i);
             fonts.push({
                 name: font.fullName,
-                location: font.location
+                location: copyFileAndAssetIt(fontFolder, font.location, assetsFolder, false),
             });
         }
 
@@ -210,8 +235,8 @@ global_actions['inspect'] = function(args) {
                 page: i+1, 
                 units: args[1],
                 geometry: get_geometry(page.bounds),
-                preview: preview_file,
-                content: content
+                preview: copyFileAndAssetIt(imgsFolder, preview_file, assetsFolder, true),
+                content: content,
             });
         }
     } finally {

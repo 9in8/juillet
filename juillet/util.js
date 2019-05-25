@@ -20,7 +20,7 @@ exports.callScript = function(applicationId, scriptFile, scriptArgs) {
           command: 'powershell',
           args: [
               '-command',
-              `$OutputEncoding = [Console]::OutputEncoding = [Text.UTF8Encoding]::UTF8; "$app = new-object -comobject ${applicationId}; $app.DoScript('${scriptFile}', 1246973031, @('${scriptArgs}'))"`
+              `"[Console]::OutputEncoding = [Text.UTF8Encoding]::UTF8; $app = new-object -comobject ${applicationId}; $app.DoScript('${scriptFile}', 1246973031, @('${scriptArgs}'))"`
           ],
           options: { shell: true }
       }
