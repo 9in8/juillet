@@ -24,24 +24,31 @@ const engines = {
  ******************************************************************************/
 
 const transfer = require('./routes/file.js');
+const parser = require('./routes/parser.js');
+
+// Package upload
 transfer.upload(app, settings, function(fileName) {
   console.log('The "%s" was extracted and is ready to process!', fileName);
 });
 
+// Retrieve assets
 transfer.assets(app, settings, function(fileName) {
   console.log('Requested asset file from "%s"', fileName);
 });
 
-const parser = require('./routes/parser.js');
+// Inspect a file
 parser.inspect(app, settings, function(engine, fileName, args, callback) {
-
   console.log('The "%s" is inspecting the file "%s"...', engine, fileName);
   let start = Date.now();
-
   engines[engine].inspect(fileName, args, function(data) {
     let duration = (Date.now() - start) / 1000;
     let length = sizeof(data.result);
-    console.log('Inspection of "%s" completed: %d bytes, %d seconds', fileName, length, duration);
+    let result = data.success ? 'SUCCESSFULLY' : 'with FAILURE'
+    console.log(
+      'Inspection of "%s" completed %s: %d bytes, %d seconds', fileName, result, length, duration
+    );
+    if (!data.success)
+      console.error(data.result.constructor == 'Array' ? data.result.join('\n') : data.result);
     callback(data);
   });
 });

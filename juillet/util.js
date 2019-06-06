@@ -29,6 +29,5 @@ exports.callScript = function(applicationId, scriptFile, scriptArgs) {
   if (typeof hostCommand[process.platform] == undefined) {
       throw new Error('This platform is not supported');
   }
-
   return hostCommand[process.platform];
 }

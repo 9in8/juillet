@@ -30,7 +30,7 @@ exports.inspect = function(app, settings, callback) {
      * @param {*} type 
      * @param {*} engine 
      */
-    const process_inspection = function(request, response, type, engine) {
+    const processInspection = function(request, response, type, engine) {
 
         let md5 = hash.MD5(request.params);
         let uuid = request.params['uuid'];
@@ -47,7 +47,18 @@ exports.inspect = function(app, settings, callback) {
 
         // Function used to process the inspection from engine
         let fromEngine = function() {
-            let fileName = glob.sync(storage + '/**/*.' + type)[0];
+
+            let files = glob.sync(storage + '/**/*.' + type);
+            let fileName = files[0];
+            if (files.length > 1) {
+                for (let i in files) {
+                    if (files[i].indexOf('.INSPECTED.') != -1) {
+                        fileName = files[i];
+                        break;
+                    }
+                }
+            }
+
             let params = request.params
             params['assets'] = assetsFolder;
             callback(engine, fileName, params, function(result) {
@@ -97,7 +108,7 @@ exports.inspect = function(app, settings, callback) {
     settings['engines'].forEach(engine => {
         let route = '/api/v1/' + engine['tool'] + '/inspect/:uuid' + customRoutes[engine['tool']];
         let ext = engine['ext']
-        app.get(route, (req, res) => process_inspection(req, res, ext, engine['tool']));
+        app.get(route, (req, res) => processInspection(req, res, ext, engine['tool']));
         console.info('Adding route "%s" to "%s" inspection', route, engine['tool']);
     });
 }

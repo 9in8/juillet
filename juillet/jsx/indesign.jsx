@@ -1,134 +1,81 @@
 #target InDesign
 #include "json2.jsx"
+#include "utils.jsx"
 
-// fileName = arguments[0];
-// var templateFile = new File(fileName);
-// var template = app.open(templateFile);
-// var myFile = new File('/Users/rcsalvador/9in8/moby/sparrow/test.pdf');
-// template.exportFile(ExportFormat.pdfType, myFile, false, "Press Quality");
-// template.close(SaveOptions.NO)
-
-
-global_actions = {};
-global_arguments = arguments;
-global_inspection = {}
-
-/*****************************************************************************
- * Common functions
- *****************************************************************************/
-
-/**
- * Round a number with decimal precision
- * 
- * @param {float} number Number to round
- * @param {int} precision Decimal precision
- * @returns {float} The rounded value
- */
-function round(number, precision) {
-    var factor = Math.pow(10, precision);
-    var tempNumber = number * factor;
-    var roundedTempNumber = Math.round(tempNumber);
-    return roundedTempNumber / factor;
-}
-
-/**
- * Return a geometric object based on the element bounds
- * 
- * @param {Array} bounds 
- * @returns {Object} Containing X, Y position and width, height
- */
-function get_geometry(bounds) {
-    var precision = 3;
-    return {
-        x: round(bounds[1], precision),
-        y: round(bounds[0], precision),
-        width: round(bounds[3] - bounds[1], precision),
-        height: round(bounds[2] - bounds[0], precision)
-    }
-}
-
-/**
- * Build a object with the color description.
- * 
- * @param {Color} color 
- * @returns {Object} The given color description
- */
-function get_color(color) {
-
-    var space = function(s, v) {
-        var name = s.split('');
-        var result = {};
-        for (var i = 0; i < name.length; i++) {
-            result[name[i]] = v[i];
-        }
-        return result;
-    }
-
-    if (color.space == ColorSpace.RGB) {
-        return space('rgb', color.colorValue);
-    } else if (color.space == ColorSpace.CMYK) {
-        return space('cmyk', color.colorValue);
-    } else if (color.space == ColorSpace.LAB) {
-        return space('lab', color.colorValue);
-    } else {
-        return color.name;
-    }
-}
-
-function saveAs(idml, targetFile, page, percent) {
-    var extension = targetFile.toLowerCase().split('.').pop();
-    const format = {
-        'png': ExportFormat.PNG_FORMAT,
-        'jpg': ExportFormat.JPG,
-        'jpeg': ExportFormat.JPG,
-        'pdf': ExportFormat.PDF_TYPE,
-    }[extension];
-
-    if (format == ExportFormat.JPG) {
-        app.jpegExportPreferences.jpegColorSpace = JpegColorSpaceEnum.RGB;
-        app.jpegExportPreferences.useDocumentBleeds = false;
-        app.jpegExportPreferences.jpegQuality = JPEGOptionsQuality.HIGH;
-        app.jpegExportPreferences.exportingSpread = false;
-        app.jpegExportPreferences.jpegExportRange = ExportRangeOrAllPages.EXPORT_RANGE;
-        app.jpegExportPreferences.pageString = idml.pages.item(page).name;
-    } else if (format == ExportFormat.JPG) {
-        app.pngExportPreferences.pngColorSpace = PNGColorSpaceEnum.RGB;
-        app.pngExportPreferences.useDocumentBleeds = false;
-        app.pngExportPreferences.pngQuality = PNGQualityEnum.HIGH;
-        app.pngExportPreferences.exportingSpread = false;
-        app.pngExportPreferences.jpegExportRange = ExportRangeOrAllPages.EXPORT_RANGE;
-        app.pngExportPreferences.pageString = idml.pages.item(page).name;
-    }
-
-    idml.exportFile(format, File(targetFile), false);
-}
-
-function createFolder(folder) {  
-    if (folder.parent !== null && !folder.parent.exists) {  
-        createFolder(folder.parent);  
-    }
-    if (!folder.exists) {
-        folder.create();
-    }  
-}  
-
-function copyFileAndAssetIt(targetFolder, sourceFile, maskFolder, dropSource) {
-    var source = new File(sourceFile);
-    var targetFileName = targetFolder.fsName + '/' + source.displayName.toLowerCase().replace(/[^0-9a-z-.]/gi, '_');
-    var target = new File(targetFileName);
-    if (!target.exists) source.copy(target);
-    if (dropSource) source.remove(); 
-    return targetFileName.replace(maskFolder.parent.parent.fsName, '{hostname}').replace(/\\+/gi, '/');
-}
+var globalActions = {};
+var globalArguments = arguments;
 
 /*****************************************************************************
  * Inspection functions
  *****************************************************************************/
 
-/**
- * TextFrame inspection function.
- */
-global_inspection['TextFrame'] = function(element) {
+var inspection = {}
+var inspectionActions = {}
+
+inspection.run = function(element, imgsFolder, assetsFolder) {
+    var content = [];
+
+    if (!element) return content;
+
+    var items = element.pageItems.everyItem().getElements();
+    var page = element.constructor.name == 'Page' ? element : element.parentPage;
+
+    if (!page) return content;
+
+    var idml = page.parent.parent;
+    var idmlFile = idml.filePath;
+
+    for (var i = 0; i < items.length; i++) {
+        var item = items[i];
+        var itemName = item.constructor.name;
+
+        if (item.isValid && itemName in inspectionActions) {
+
+            var inspectionResult = inspectionActions[itemName](item, imgsFolder, assetsFolder);
+
+            if (itemName == 'Group' || (itemName != 'Group' && item.parent.constructor.name != 'Group')) {
+                // Generates the item preview
+                var pageNumber = page.documentOffset;
+                var itemPreview = idmlFile.parent.fsName + '/' + itemName + '_' + (pageNumber + 1) + '_' + item.label + '.png';
+                util.idml.saveAs(idml, itemPreview, pageNumber, item);
+                inspectionResult['preview'] = util.fs.copyFileAndAssetIt(imgsFolder, itemPreview, assetsFolder, true);
+            }
+
+            // Stores the item content
+            content.push(inspectionResult);
+        }
+    }
+    return content;
+}
+
+inspection.build = function(type, element, imgsFolder, assetsFolder) {
+    var result = {
+        uid: element.label,
+        type: type,
+        geometry: util.element.getGeometry(element),
+    }
+    var images = util.element.getImages(element, imgsFolder, assetsFolder);
+    var content = inspection.run(element, imgsFolder, assetsFolder);
+
+    if (images && images.length) {
+        result['images'] = images;
+    }
+
+    if (content && content.length) {
+        result['content'] = content;
+    }
+    return result;
+}
+
+var objs = ['Polygon', 'Oval', 'Rectangle', 'Group']
+for (var i = 0; i < objs.length; i++) {
+    var objectName = objs[i]
+    inspectionActions[objectName] = function(element, imgsFolder, assetsFolder) {
+        return inspection.build(objectName.toLowerCase(), element, imgsFolder, assetsFolder);
+    }    
+}
+
+inspectionActions['TextFrame'] = function(element) {
 
     var story = element.parentStory;
 
@@ -147,21 +94,20 @@ global_inspection['TextFrame'] = function(element) {
         }
 
         texts.push({
+            type: 'text',
             text: text.contents.replace("\r", "\n"),
             fontName: text.appliedFont.name.replace("\t", " "),
             fontSize: text.pointSize,
-            color: get_color(text.fillColor),
+            color: util.element.getColor(text.fillColor),
             style: style,
         });
     }
 
-    var bounds = element.geometricBounds
-
     return {
-        id: element.id,
-        type: 'text',
+        uid: element.label,
+        type: 'text_frame',
         content: texts,
-        geometry: get_geometry(bounds)
+        geometry: util.element.getGeometry(element),
     }
 }
 
@@ -177,66 +123,71 @@ global_inspection['TextFrame'] = function(element) {
  * @param {string} fileName The IDML file path
  * @param {string} units The measurament unit
  */
-global_actions['inspect'] = function(args) {
+globalActions['inspect'] = function(args) {
 
     // Load the document
     var fileName = args[0];
-    var idml_file = new File(fileName);
-    var idml = app.open(idml_file);
-
-    // Set the document measurament units
-    var units = {
-        mm: MeasurementUnits.MILLIMETERS,
-        cm: MeasurementUnits.CENTIMETERS,
-        pt: MeasurementUnits.POINTS,
-        px: MeasurementUnits.PIXELS,
-    }[args[1]];
-    idml.viewPreferences.horizontalMeasurementUnits = units;
-    idml.viewPreferences.verticalMeasurementUnits = units;
-
-    var assetsFolder = new Folder(args[2]);
-    var fontFolder = new Folder(assetsFolder.fsName + '/fonts/');
-    var imgsFolder = new Folder(assetsFolder.fsName + '/images/');
-
-    createFolder(fontFolder);
-    createFolder(imgsFolder);
+    var idmlFile = new File(fileName);
+    var idml = app.open(idmlFile);
+    var isInspected = fileName.indexOf('.INSPECTED.') != -1;
 
     var pages = [];
     var fonts = [];
 
     try {
+
+        // Tag elements
+        if (!isInspected) {
+            for (var i = 0; i < idml.allPageItems.length; i++) {
+                var item = idml.allPageItems[i];
+                item.label = util.generateUID();
+            }
+            fileName = fileName.replace('.idml', '.INSPECTED.idml');
+            var inspectedFile = new File(fileName);
+            idml.save(inspectedFile, false, 'File inspected and tagged!', true);
+        }
+
+        // Set the document measurament units
+        var units = {
+            mm: MeasurementUnits.MILLIMETERS,
+            cm: MeasurementUnits.CENTIMETERS,
+            pt: MeasurementUnits.POINTS,
+            px: MeasurementUnits.PIXELS,
+        }[args[1]];
+        idml.viewPreferences.horizontalMeasurementUnits = units;
+        idml.viewPreferences.verticalMeasurementUnits = units;
+
+        var assetsFolder = new Folder(args[2]);
+        var fontFolder = new Folder(assetsFolder.fsName + '/fonts/');
+        var imgsFolder = new Folder(assetsFolder.fsName + '/images/');
+
+        util.fs.createFolder(fontFolder);
+        util.fs.createFolder(imgsFolder);
+
         // Get the font list used in the document
         for (var i = 0; i < idml.fonts.length; i++) {
             var font = idml.fonts.item(i);
             fonts.push({
                 name: font.fullName,
-                location: copyFileAndAssetIt(fontFolder, font.location, assetsFolder, false),
+                location: util.fs.copyFileAndAssetIt(fontFolder, font.location, assetsFolder, false),
             });
         }
 
         // Get the document content, by page
         for (var i = 0; i < idml.pages.length; i++) {
             var page = idml.pages.item(i);
-            var content = [];
-            for (var j = 0; j < page.allPageItems.length; j++) {
-                var item = page.allPageItems[j];
-                var itemName = item.constructor.name;
-                if (itemName in global_inspection) {
-                    content.push(global_inspection[itemName](item));
-                }
-            }
 
             // Generate the page preview
-            preview_file = fileName.replace('.idml', '.page_' + (i + 1) + '.jpg');
-            saveAs(idml, preview_file, i, 0);
+            preview_file = idmlFile.parent.fsName + '/' + 'page_' + (i + 1) + '.jpg';
+            util.idml.saveAs(idml, preview_file, i, 0);
 
             // Push page content to return
             pages.push({
-                page: i+1, 
+                page: i + 1, 
                 units: args[1],
-                geometry: get_geometry(page.bounds),
-                preview: copyFileAndAssetIt(imgsFolder, preview_file, assetsFolder, true),
-                content: content,
+                geometry: util.element.getGeometry(page),
+                preview: util.fs.copyFileAndAssetIt(imgsFolder, preview_file, assetsFolder, true),
+                content: inspection.run(page, imgsFolder, assetsFolder),
             });
         }
     } finally {
@@ -250,21 +201,26 @@ global_actions['inspect'] = function(args) {
     }
 }
 
-global_actions['exportAs'] = function(args) {
-    throw Exception('Not Implemented!');
-}
-
 /**
  * Find script arguments and call the target function.
  */
 function main(actions) {
     // Action is the first script argument
-    var action = global_arguments.shift();
+    var action = globalArguments.shift();
     // Other ones will be the call argument
-    var args = global_arguments;
+    var args = globalArguments;
     // Call the action function
-    return global_actions[action](args);
+    return globalActions[action](args);
 }
 
 // Aways returns a JSON, that will catch by the caller.
-JSON.stringify(main());
+try {
+    JSON.stringify(main());
+} catch(err) {
+    JSON.stringify({
+        exception: err.constructor.name,
+        error: err.message,
+        file: err.file,
+        line: err.line,
+    });
+}

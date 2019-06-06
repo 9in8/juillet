@@ -48,10 +48,14 @@ function call(actionName, scriptArgs, callback) {
 
   // Exit happens when the script finish
   child.on('exit', (code) => {
+    let result = (code == 0) ? JSON.parse(stdout) : stderr;
+    if ('exception' in result) {
+      code = 99;
+    }
     let output = {
       success: (code == 0),
       action: actionName,
-      result: (code == 0) ? JSON.parse(stdout) : stderr,
+      result: result,
     }
 
     if (callback) {
@@ -69,11 +73,4 @@ exports.inspect = function(fileName, args, callback) {
   let units = args['units'];
   let assets = args['assets'];
   call('inspect', [fileName, units, assets], callback);
-}
-
-/**
- * Exports the InDesing file to a specific format
- */
-exports.exportAs = function(fileName, callback) {
-  call('exportAs', [fileName], callback);
 }
